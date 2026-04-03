@@ -12,6 +12,9 @@ const countdownFontFamily = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 
 export default function App() {
   const [showSecondTitle, setShowSecondTitle] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
   const [timeLeft, setTimeLeft] = useState({
     days: 0,
     hours: 0,
@@ -57,6 +60,19 @@ export default function App() {
     return () => clearTimeout(switchTimer);
   }, []);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleThemeChange = (event: MediaQueryListEvent) => {
+      setIsDarkMode(event.matches);
+    };
+
+    setIsDarkMode(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleThemeChange);
+
+    return () => mediaQuery.removeEventListener('change', handleThemeChange);
+  }, []);
+
   const formatNumber = (num: number) => {
     return num.toString().padStart(2, '0');
   };
@@ -66,7 +82,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-between p-6 md:p-12 font-sans selection:bg-white selection:text-black bg-black text-white overflow-hidden">
+    <div
+      className={`min-h-screen flex flex-col items-center justify-between p-6 md:p-12 font-sans overflow-hidden ${
+        isDarkMode
+          ? 'bg-black text-white selection:bg-white selection:text-black'
+          : 'bg-white text-black selection:bg-black selection:text-white'
+      }`}
+    >
       {/* Header with Title */}
       <header className="w-full flex justify-center pt-6 md:pt-16 px-2">
         <AnimatePresence mode="wait">
