@@ -125,7 +125,7 @@ function TimeUnit({ value, label }: { value: string; label: string }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="text-4xl sm:text-5xl md:text-8xl font-black font-mono tracking-tight leading-none"
+          className="text-6xl sm:text-7xl md:text-9xl font-black font-mono tracking-tight leading-none"
           style={{ fontFamily: countdownFontFamily }}
         >
           {value}
@@ -144,7 +144,7 @@ function MillisecondsUnit({ value, label }: { value: string; label: string }) {
       <motion.span
         animate={{ opacity: [0.6, 1, 0.6] }}
         transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
-        className="text-3xl sm:text-4xl md:text-6xl font-black font-mono tracking-tight leading-none"
+        className="text-5xl sm:text-6xl md:text-7xl font-black font-mono tracking-tight leading-none"
         style={{ fontFamily: countdownFontFamily }}
       >
         {value}
