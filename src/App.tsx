@@ -7,6 +7,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Instagram } from 'lucide-react';
 import { FaGithub, FaSoundcloud } from 'react-icons/fa';
+import { FaTiktok } from 'react-icons/fa6';
 
 const countdownFontFamily = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 
@@ -73,6 +74,18 @@ export default function App() {
     return () => mediaQuery.removeEventListener('change', handleThemeChange);
   }, []);
 
+  useEffect(() => {
+    let themeMeta = document.querySelector('meta[name="theme-color"]:not([media])');
+
+    if (!themeMeta) {
+      themeMeta = document.createElement('meta');
+      themeMeta.setAttribute('name', 'theme-color');
+      document.head.appendChild(themeMeta);
+    }
+
+    themeMeta.setAttribute('content', isDarkMode ? '#000000' : '#ffffff');
+  }, [isDarkMode]);
+
   const formatNumber = (num: number) => {
     return num.toString().padStart(2, '0');
   };
@@ -124,9 +137,9 @@ export default function App() {
       <footer className="w-full flex flex-col items-center gap-8 pb-8 md:pb-10 px-2">
         <div className="flex flex-wrap justify-center gap-6 sm:gap-12">
           <SocialLink href="https://www.instagram.com/dextrolov333/" icon={<Instagram size={24} />} label="Instagram" />
-          <SocialLink href="https://www.instagram.com/xenredda/" icon={<Instagram size={24} />} label="Instagram" />
           <SocialLink href="https://www.soundcloud.com/breckislove/" icon={<FaSoundcloud size={24} />} label="SoundCloud" />
           <SocialLink href='https://github.com/ma472168/dextrolov333' icon={<FaGithub size={24} />} label="GitHub" />
+          <SocialLink href='https://www.tiktok.com/@dextrolov333' icon={<FaTiktok size={24} />} label="TikTok" />
         </div>
 
         <div className="text-[10px] md:text-xs tracking-[0.4em] uppercase opacity-30 text-center font-medium">
