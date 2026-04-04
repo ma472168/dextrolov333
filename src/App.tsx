@@ -129,7 +129,9 @@ export default function App() {
           <TimeUnit value={formatNumber(timeLeft.hours)} label="HOURS" />
           <TimeUnit value={formatNumber(timeLeft.minutes)} label="MINUTES" />
           <TimeUnit value={formatNumber(timeLeft.seconds)} label="SECONDS" />
-          <MillisecondsUnit value={formatMilliseconds(timeLeft.milliseconds)} label="MILLISECONDS" />
+          <div className="col-span-2 justify-self-center sm:col-span-1 sm:justify-self-auto">
+            <MillisecondsUnit value={formatMilliseconds(timeLeft.milliseconds)} label="MILLISECONDS" />
+          </div>
         </div>
       </main>
 
@@ -144,9 +146,6 @@ export default function App() {
 
         <div className="text-[10px] md:text-xs tracking-[0.4em] uppercase opacity-30 text-center font-medium">
           hosted by xenredda & breck
-        </div>
-        <div className="text-[10px] md:text-xs tracking-[0.4em] uppercase opacity-30 text-center font-medium">
-          coded by xenredda
         </div>
       </footer>
     </div>
