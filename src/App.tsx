@@ -130,7 +130,7 @@ export default function App() {
         </div>
 
         <div className="text-[10px] md:text-xs tracking-[0.4em] uppercase opacity-30 text-center font-medium">
-          hosted by xenredda & breck
+          hosted by xenredda & breck & rof
         </div>
       </footer>
     </div>
