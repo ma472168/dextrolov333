@@ -126,7 +126,7 @@ export default function App() {
           <SocialLink href="https://www.instagram.com/dextrolov333/" icon={<Instagram size={24} />} label="Instagram" />
           <SocialLink href="https://www.instagram.com/xenredda/" icon={<Instagram size={24} />} label="Instagram" />
           <SocialLink href="https://www.soundcloud.com/breckislove/" icon={<FaSoundcloud size={24} />} label="SoundCloud" />
-          <SocialLink href='https://github.com/ma472168' icon={<FaGithub size={24} />} label="GitHub" />
+          <SocialLink href='https://github.com/ma472168/dextrolov333' icon={<FaGithub size={24} />} label="GitHub" />
         </div>
 
         <div className="text-[10px] md:text-xs tracking-[0.4em] uppercase opacity-30 text-center font-medium">
