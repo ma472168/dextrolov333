@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type FormEvent, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Instagram, Volume2, VolumeX, X } from 'lucide-react';
 import { FaGithub, FaSoundcloud } from 'react-icons/fa';
 import { FaTiktok } from 'react-icons/fa6';
 import Track from './music/veneno mix.wav';
+import { supabase } from './lib/supabase';
 
 const countdownFontFamily = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 
@@ -20,16 +21,15 @@ interface CartItem {
   image: string;
 }
 
-const PRODUCTS = [
-  { id: 1, name: 'Dextrolov333 T-Shirt', price: 45, image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80' },
-  { id: 2, name: 'Limited Cap', price: 35, image: 'https://images.unsplash.com/photo-1521369909029-2afed882baee?auto=format&fit=crop&w=900&q=80' },
-  { id: 3, name: 'Signature Hoodie', price: 85, image: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=900&q=80' },
-  { id: 4, name: 'Studio Tote Bag', price: 55, image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80' },
-  { id: 5, name: 'Essentials Long Sleeve', price: 50, image: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=900&q=80' },
-  { id: 6, name: 'Crew Socks Set', price: 25, image: 'https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?auto=format&fit=crop&w=900&q=80' },
-];
+interface StoreProduct {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+  description: string;
+}
 
-export default function App() {
+function CountdownStoreApp({ canEditStore }: { canEditStore: boolean }) {
   const [showSecondTitle, setShowSecondTitle] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
@@ -39,6 +39,9 @@ export default function App() {
   const [isCountdownOver, setIsCountdownOver] = useState(false);
   const [viewMode, setViewMode] = useState<'countdown' | 'shop' | 'checkout'>('countdown');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [productsError, setProductsError] = useState('');
   const [timeLeft, setTimeLeft] = useState({
     days: 0,
     hours: 0,
@@ -48,8 +51,41 @@ export default function App() {
   });
 
   useEffect(() => {
+    const loadProducts = async () => {
+      setIsLoadingProducts(true);
+      setProductsError('');
+
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, price, image, description')
+        .order('id', { ascending: true });
+
+      if (error) {
+        setProducts([]);
+        setProductsError('No se pudieron cargar los productos desde Supabase.');
+        setIsLoadingProducts(false);
+        return;
+      }
+
+      const parsedProducts: StoreProduct[] = (data ?? []).map((item) => ({
+        id: Number(item.id),
+        name: String(item.name ?? ''),
+        price: Number(item.price ?? 0),
+        image: String(item.image ?? ''),
+        description: String(item.description ?? ''),
+      }));
+
+      setProducts(parsedProducts);
+      setIsLoadingProducts(false);
+    };
+
+    void loadProducts();
+  }, []);
+
+  useEffect(() => {
     const targetDate = new Date('May 14, 2026 00:00:00').getTime();
-    // TEST DATE. const targetDate = new Date('2026-04-04T15:26:00').getTime();
+    // TEST DATE. 
+    // const targetDate = new Date('2026-04-04T15:26:00').getTime();
     let animationFrameId = 0;
 
     const updateCountdown = () => {
@@ -214,7 +250,19 @@ export default function App() {
   };
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const isStoreView = viewMode === 'shop' || viewMode === 'checkout' || isCountdownOver;
+  const isStoreUnlocked = canEditStore || isCountdownOver;
+  const isStoreView = viewMode === 'shop' || viewMode === 'checkout' || isStoreUnlocked;
+  const visibleProducts = products;
+
+  useEffect(() => {
+    if (canEditStore && viewMode === 'countdown') {
+      setViewMode('shop');
+    }
+
+    if (!canEditStore && !isCountdownOver && viewMode !== 'countdown') {
+      setViewMode('countdown');
+    }
+  }, [canEditStore, isCountdownOver, viewMode]);
 
   return (
     <div
@@ -256,9 +304,14 @@ export default function App() {
             onRemoveItem={handleRemoveFromCart}
             onUpdateQuantity={handleUpdateCartQuantity}
           />
-        ) : viewMode === 'shop' || isCountdownOver ? (
+        ) : viewMode === 'shop' || isStoreUnlocked ? (
           <Shop
             isDarkMode={isDarkMode}
+            products={visibleProducts}
+            canEditStore={canEditStore}
+            onProductsChange={setProducts}
+            isLoadingProducts={isLoadingProducts}
+            productsError={productsError}
             cart={cart}
             onAddToCart={handleAddToCart}
             onCheckout={() => setViewMode('checkout')}
@@ -312,6 +365,224 @@ export default function App() {
         {isAudioPlaying ? <Volume2 size={14} /> : <VolumeX size={14} />}
         {isAudioPlaying ? 'Audio On' : 'Audio Off'}
       </motion.button>
+    </div>
+  );
+}
+
+export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const bootstrapSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setIsAuthenticated(Boolean(data.session?.user));
+    };
+
+    void bootstrapSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(Boolean(session?.user));
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  return (
+    <>
+      <CountdownStoreApp canEditStore={isAuthenticated} />
+      <CornerLoginTab />
+    </>
+  );
+}
+
+function CornerLoginTab() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentIdentity, setCurrentIdentity] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const resolveUsername = async (email?: string, metadataUsername?: string | null) => {
+    const normalizedMetadata = (metadataUsername ?? '').trim().toLowerCase();
+    if (normalizedMetadata) {
+      return normalizedMetadata;
+    }
+
+    if (!email) {
+      return '';
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('email', email)
+      .maybeSingle();
+
+    return String(profile?.username ?? '').trim().toLowerCase();
+  };
+
+  useEffect(() => {
+    const bootstrapSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user ?? null;
+      setIsAuthenticated(Boolean(user));
+      if (!user) {
+        setCurrentIdentity('');
+        return;
+      }
+
+      const username = await resolveUsername(user.email, String(user.user_metadata?.username ?? ''));
+      setCurrentIdentity(username);
+    };
+
+    void bootstrapSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user ?? null;
+      setIsAuthenticated(Boolean(user));
+
+      if (!user) {
+        setCurrentIdentity('');
+        return;
+      }
+
+      void (async () => {
+        const username = await resolveUsername(user.email, String(user.user_metadata?.username ?? ''));
+        setCurrentIdentity(username);
+      })();
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage('');
+
+    const normalizedUsername = username.trim().toLowerCase();
+
+    if (!normalizedUsername || !password) {
+      setErrorMessage('Completa usuario y contrasena.');
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('username', normalizedUsername)
+      .maybeSingle();
+
+    if (profileError || !profile?.email) {
+      setErrorMessage('Usuario no encontrado.');
+      return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: profile.email,
+      password,
+    });
+
+    if (signInError) {
+      setErrorMessage(`Error de acceso: ${signInError.message}`);
+      return;
+    }
+
+    setIsAuthenticated(true);
+    setCurrentIdentity(normalizedUsername);
+    setUsername('');
+    setPassword('');
+    setIsOpen(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    setCurrentIdentity('');
+    setUsername('');
+    setPassword('');
+    setErrorMessage('');
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="fixed top-3 left-3 md:top-6 md:left-6 z-[10001]"
+    >
+      <motion.button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className={`px-0 py-0 text-xs md:text-sm tracking-[0.06em] underline underline-offset-4 transition-colors duration-300 ${
+          isAuthenticated
+            ? 'text-emerald-300 hover:text-emerald-200'
+            : 'text-white hover:text-white/80'
+        }`}
+      >
+        {isAuthenticated ? `@${currentIdentity || 'usuario'}` : 'login'}
+      </motion.button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="mt-2 w-[280px] border border-white/20 bg-black/85 text-white p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-sm"
+          >
+            {isAuthenticated ? (
+              <div className="space-y-3">
+                <p className="text-xs tracking-[0.08em] uppercase opacity-80">Conectado como {currentIdentity || 'usuario'}</p>
+                <motion.button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full text-[10px] md:text-xs font-bold tracking-[0.1em] uppercase py-2.5 border border-white/30 hover:border-white hover:bg-white hover:text-black transition-all duration-300"
+                >
+                  Cerrar sesion
+                </motion.button>
+              </div>
+            ) : (
+              <form onSubmit={handleLogin} className="space-y-3">
+                <p className="text-xs tracking-[0.08em] uppercase opacity-70">Acceso privado</p>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                  placeholder="Usuario"
+                  className="w-full text-xs py-2.5 px-3 border border-white/25 tracking-[0.08em] placeholder:opacity-50 bg-black/70 text-white focus:outline-none"
+                />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  placeholder="Password"
+                  className="w-full text-xs py-2.5 px-3 border border-white/25 tracking-[0.08em] placeholder:opacity-50 bg-black/70 text-white focus:outline-none"
+                />
+
+                {errorMessage && <p className="text-xs text-red-400">{errorMessage}</p>}
+
+                <motion.button
+                  type="submit"
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full text-[10px] md:text-xs font-bold tracking-[0.1em] uppercase py-2.5 border border-white hover:bg-white hover:text-black transition-all duration-300"
+                >
+                  Iniciar sesion
+                </motion.button>
+              </form>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -377,20 +648,142 @@ function SocialLink({ href, icon, label }: { href: string; icon: ReactNode; labe
 
 interface ShopProps {
   isDarkMode: boolean;
+  products: StoreProduct[];
+  canEditStore: boolean;
+  onProductsChange: (products: StoreProduct[]) => void;
+  isLoadingProducts: boolean;
+  productsError: string;
   cart: CartItem[];
-  onAddToCart: (product: Omit<CartItem, 'quantity'>) => void;
+  onAddToCart: (product: StoreProduct) => void;
   onCheckout: () => void;
   cartCount: number;
   onRemoveItem: (id: number) => void;
 }
 
-function Shop({ isDarkMode, cart, onAddToCart, onCheckout, cartCount, onRemoveItem }: ShopProps) {
+function Shop({ isDarkMode, products, canEditStore, onProductsChange, isLoadingProducts, productsError, cart, onAddToCart, onCheckout, cartCount, onRemoveItem }: ShopProps) {
   const [activeProductId, setActiveProductId] = useState<number | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftProducts, setDraftProducts] = useState<StoreProduct[]>([]);
+  const [isSavingProducts, setIsSavingProducts] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
-  const handleProductClick = (product: Omit<CartItem, 'quantity'>) => {
+  useEffect(() => {
+    setDraftProducts(products);
+  }, [products]);
+
+  const handleProductClick = (product: StoreProduct) => {
     setActiveProductId(product.id);
     onAddToCart(product);
     window.setTimeout(() => setActiveProductId(null), 260);
+  };
+
+  const handleDraftChange = (id: number, field: 'name' | 'price' | 'image' | 'description', value: string) => {
+    setDraftProducts((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
+
+        if (field === 'price') {
+          return { ...item, price: Number(value || 0) };
+        }
+
+        return { ...item, [field]: value };
+      })
+    );
+  };
+
+  const handleSaveProducts = async () => {
+    setIsSavingProducts(true);
+    setSaveMessage('');
+
+    for (const product of draftProducts) {
+      const { error } = await supabase
+        .from('products')
+        .update({
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          description: product.description,
+        })
+        .eq('id', product.id);
+
+      if (error) {
+        setSaveMessage(`Error al guardar: ${error.message}`);
+        setIsSavingProducts(false);
+        return;
+      }
+    }
+
+    onProductsChange(draftProducts);
+    setSaveMessage('Cambios guardados.');
+    setIsSavingProducts(false);
+    setIsEditing(false);
+  };
+
+  const handleAddProduct = async () => {
+    setIsSavingProducts(true);
+    setSaveMessage('');
+
+    const { data, error } = await supabase
+      .from('products')
+      .insert({
+        name: 'Nuevo producto',
+        price: 0,
+        image: '',
+        description: '',
+      })
+      .select('id, name, price, image, description')
+      .single();
+
+    if (error || !data) {
+      setSaveMessage(`Error al crear: ${error?.message ?? 'desconocido'}`);
+      setIsSavingProducts(false);
+      return;
+    }
+
+    const createdProduct: StoreProduct = {
+      id: Number(data.id),
+      name: String(data.name ?? ''),
+      price: Number(data.price ?? 0),
+      image: String(data.image ?? ''),
+      description: String(data.description ?? ''),
+    };
+
+    const nextProducts = [...draftProducts, createdProduct];
+    setDraftProducts(nextProducts);
+    onProductsChange(nextProducts);
+    setSaveMessage('Producto creado.');
+    setIsSavingProducts(false);
+  };
+
+  const handleDeleteProduct = async (id: number) => {
+    const shouldDelete = window.confirm('Seguro que quieres eliminar este producto? Esta accion no se puede deshacer.');
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setIsSavingProducts(true);
+    setSaveMessage('');
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      setSaveMessage(`Error al eliminar: ${error.message}`);
+      setIsSavingProducts(false);
+      return;
+    }
+
+    const nextProducts = draftProducts.filter((item) => item.id !== id);
+    setDraftProducts(nextProducts);
+    onProductsChange(nextProducts);
+    onRemoveItem(id);
+    setSaveMessage('Producto eliminado.');
+    setIsSavingProducts(false);
   };
 
   return (
@@ -410,6 +803,120 @@ function Shop({ isDarkMode, cart, onAddToCart, onCheckout, cartCount, onRemoveIt
         </p>
       </div>
 
+      {canEditStore && (
+        <div className="mb-8 border border-white/20 p-4 md:p-5 bg-black/20">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] md:text-xs tracking-[0.12em] uppercase opacity-80">Modo editor de tienda</p>
+              <p className="text-[11px] md:text-xs opacity-60 mt-1">Edita nombre, precio, imagen y descripcion corta de cada producto.</p>
+            </div>
+            <motion.button
+              type="button"
+              onClick={() => setIsEditing((prev) => !prev)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="text-[10px] md:text-xs font-bold tracking-[0.1em] uppercase py-2 px-3 border border-white/30 hover:border-white hover:bg-white hover:text-black transition-all duration-300"
+            >
+              {isEditing ? 'Cancelar' : 'Editar productos'}
+            </motion.button>
+          </div>
+
+          {isEditing && (
+            <div className="mt-4 space-y-3">
+              <motion.button
+                type="button"
+                onClick={() => void handleAddProduct()}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                disabled={isSavingProducts}
+                className="text-[10px] md:text-xs font-bold tracking-[0.1em] uppercase py-2.5 px-4 border border-white/30 hover:border-white hover:bg-white hover:text-black transition-all duration-300 disabled:opacity-50"
+              >
+                Agregar producto
+              </motion.button>
+
+              {draftProducts.map((product) => (
+                <div key={product.id} className="border border-white/15 p-3 md:p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] md:text-xs tracking-[0.12em] uppercase opacity-70">Producto #{product.id}</p>
+                    <motion.button
+                      type="button"
+                      onClick={() => void handleDeleteProduct(product.id)}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      disabled={isSavingProducts}
+                      className="text-[10px] md:text-xs font-bold tracking-[0.1em] uppercase py-2 px-3 border border-red-300/50 text-red-300 hover:bg-red-400 hover:text-black transition-all duration-300 disabled:opacity-50"
+                    >
+                      Eliminar
+                    </motion.button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label className="text-[10px] tracking-[0.1em] uppercase opacity-70">
+                      Nombre
+                      <input
+                        type="text"
+                        value={product.name}
+                        onChange={(event) => handleDraftChange(product.id, 'name', event.target.value)}
+                        placeholder="Nombre"
+                        className="mt-1 w-full text-xs py-2 px-3 border border-white/25 bg-black/60 text-white placeholder:opacity-50 focus:outline-none"
+                      />
+                    </label>
+
+                    <label className="text-[10px] tracking-[0.1em] uppercase opacity-70">
+                      Precio
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={product.price}
+                        onChange={(event) => handleDraftChange(product.id, 'price', event.target.value)}
+                        placeholder="Precio"
+                        className="mt-1 w-full text-xs py-2 px-3 border border-white/25 bg-black/60 text-white placeholder:opacity-50 focus:outline-none"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block text-[10px] tracking-[0.1em] uppercase opacity-70">
+                    URL imagen
+                    <input
+                      type="text"
+                      value={product.image}
+                      onChange={(event) => handleDraftChange(product.id, 'image', event.target.value)}
+                      placeholder="https://..."
+                      className="mt-1 w-full text-xs py-2 px-3 border border-white/25 bg-black/60 text-white placeholder:opacity-50 focus:outline-none"
+                    />
+                  </label>
+
+                  <label className="block text-[10px] tracking-[0.1em] uppercase opacity-70">
+                    Descripcion corta
+                    <textarea
+                      value={product.description}
+                      onChange={(event) => handleDraftChange(product.id, 'description', event.target.value)}
+                      placeholder="Descripcion breve para la tarjeta del producto"
+                      rows={2}
+                      className="mt-1 w-full text-xs py-2 px-3 border border-white/25 bg-black/60 text-white placeholder:opacity-50 focus:outline-none resize-y"
+                    />
+                  </label>
+                </div>
+              ))}
+
+              <motion.button
+                type="button"
+                onClick={() => void handleSaveProducts()}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                disabled={isSavingProducts}
+                className="text-[10px] md:text-xs font-bold tracking-[0.1em] uppercase py-2.5 px-4 border border-white hover:bg-white hover:text-black transition-all duration-300 disabled:opacity-50"
+              >
+                {isSavingProducts ? 'Guardando...' : 'Guardar cambios'}
+              </motion.button>
+
+              {saveMessage && <p className="text-xs opacity-80">{saveMessage}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
       {cartCount > 0 && (
         <motion.button
           onClick={onCheckout}
@@ -425,8 +932,20 @@ function Shop({ isDarkMode, cart, onAddToCart, onCheckout, cartCount, onRemoveIt
         </motion.button>
       )}
 
+      {isLoadingProducts && (
+        <p className="text-xs tracking-[0.12em] uppercase opacity-70 mb-6">Cargando productos...</p>
+      )}
+
+      {productsError && (
+        <p className="text-xs text-red-400 mb-6">{productsError}</p>
+      )}
+
+      {!isLoadingProducts && !productsError && products.length === 0 && (
+        <p className="text-xs tracking-[0.12em] uppercase opacity-70 mb-6">No hay productos en la base de datos.</p>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 gap-6 md:gap-8 w-full">
-        {PRODUCTS.map((product, index) => {
+        {products.map((product, index) => {
           const inCart = cart.find((item) => item.id === product.id)?.quantity || 0;
           return (
             <motion.div
@@ -444,6 +963,7 @@ function Shop({ isDarkMode, cart, onAddToCart, onCheckout, cartCount, onRemoveIt
                     name: product.name,
                     price: product.price,
                     image: product.image,
+                    description: product.description,
                   })
                 }
                 whileTap={{ scale: 0.96 }}
@@ -462,6 +982,11 @@ function Shop({ isDarkMode, cart, onAddToCart, onCheckout, cartCount, onRemoveIt
                 <h3 className="text-xs md:text-sm font-light tracking-[0.08em] uppercase">
                   {product.name}
                 </h3>
+                {product.description && (
+                  <p className={`text-[11px] md:text-xs leading-relaxed ${isDarkMode ? 'opacity-65' : 'opacity-70'}`}>
+                    {product.description}
+                  </p>
+                )}
                 <p className={`text-xs md:text-sm font-light ${isDarkMode ? 'opacity-60' : 'opacity-70'}`}>
                   ${product.price.toFixed(2)}
                 </p>
