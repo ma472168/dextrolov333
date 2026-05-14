@@ -83,7 +83,7 @@ function CountdownStoreApp({ canEditStore }: { canEditStore: boolean }) {
   }, []);
 
   useEffect(() => {
-    const targetDate = new Date('May 14, 2026 00:00:00').getTime();
+    const targetDate = new Date('May 14, 2027 00:00:00').getTime();
     // TEST DATE. 
     // const targetDate = new Date('2026-04-04T15:26:00').getTime();
     let animationFrameId = 0;
